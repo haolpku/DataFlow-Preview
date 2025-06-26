@@ -35,6 +35,16 @@ class KnowledgeCleanerPrompt:
    - 禁止增删任何事实、数字或命名实体
    - 禁止改写专业术语或专有名词
    - 禁止修改表格数据结构
+
+示例：
+输入：
+<article><h1>量子计算</h1><p>“量子比特”<span class="ref">[1]</span>是基本单元</p></article>
+
+输出：
+<cleaned>
+量子计算
+"量子比特"[1]是基本单元
+</cleaned>
 """
         else:
             self.prompt_header = r"""
@@ -63,6 +73,16 @@ by applying the following rules STRICTLY:
    - DO NOT add/remove any facts, numbers, or named entities
    - DO NOT paraphrase technical terms or proper nouns
    - DO NOT modify tabular data structures
+
+Example:
+Input:
+<article><h1>Quantum Computing</h1><p>“Qubit”<span class="ref">[1]</span> is the basic unit</p></article>
+
+Output:
+<cleaned>
+Quantum Computing
+"Qubit"[1] is the basic unit
+</cleaned>
 """
 
     def Classic_COT_Prompt(self, raw_content: str) -> str:
@@ -84,7 +104,7 @@ by applying the following rules STRICTLY:
 4. [结构检查] 验证换行符是否符合原意
 5. [最终输出] 生成100%保真的清洗后文本
 """.strip()
-            output_requirement = '你的响应必须直接以"Solution:"开头，不要任何前言。生成答案后立即结束响应。\nSolution:'
+            output_requirement = '你的响应必须只包括清洗后的文本，直接以"<cleaned>"开头，以"</cleaned>"结尾，不要包含任何前言或后语。生成结果后立即结束响应。 '
         else:
             processing_steps = """
 Processing Steps:
@@ -94,7 +114,7 @@ Processing Steps:
 4. [Structural Check] Verify line breaks match original intent
 5. [Final Output] Generate cleaned text with 100% information fidelity
 """.strip()
-            output_requirement = 'Your response must directly start with "Solution:" without any preamble. After the answer is generated, finish your response right away.\nSolution:'
+            output_requirement = 'Your response must only include cleaned text, directly start with "<cleaned>" and end with </cleaned>, without any preamble or postscript. After the answer is generated, finish your response right away.'
 
         prompt = f"""
 {self.prompt_header}

@@ -66,7 +66,14 @@ class KnowledgeCleaner(OperatorABC):
         formatted_prompts = self._reformat_prompt(dataframe)
         cleaned = self.llm_serving.generate_from_input(formatted_prompts)
 
-        dataframe[self.output_key] = cleaned
+        #for each in cleaned, only save the content in <cleaned> and </cleaned>
+        cleaned_extracted = [
+            text.split('<cleaned>')[1].split('</cleaned>')[0].strip() 
+            if '<cleaned>' in text and '</cleaned>' in text 
+            else text.strip()
+            for text in cleaned
+        ]
+        dataframe[self.output_key] = cleaned_extracted
         output_file = storage.write(dataframe)
         self.logger.info(f"Results saved to {output_file}")
 
