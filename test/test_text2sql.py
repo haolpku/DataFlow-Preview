@@ -33,7 +33,7 @@ class Text2SQLPipeline():
 
         self.schema_linking_step3 = SchemaLinking(
             table_info_file=table_info_file,
-            model_path="/mnt/public/data/cqf/models/sic_merged", # download the model from https://pan.quark.cn/s/418c417127ae or https://drive.google.com/file/d/1xzNvv5h-ZjhjOOZ-ePv1xg_n3YbUNLWi/view?usp=sharing
+            model_path="", # download the model from https://pan.quark.cn/s/418c417127ae or https://drive.google.com/file/d/1xzNvv5h-ZjhjOOZ-ePv1xg_n3YbUNLWi/view?usp=sharing
             selection_mode="eval",                       
             num_top_k_tables=5,                           
             num_top_k_columns=5     
