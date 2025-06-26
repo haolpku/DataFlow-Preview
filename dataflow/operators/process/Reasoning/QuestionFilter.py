@@ -71,7 +71,7 @@ class QuestionFilter(OperatorABC):
             self.logger.error(f"Response format error for problem: {response}. Error: {e}")
             return False
             
-    def run(self, storage: DataFlowStorage, input_key: str ) -> list:
+    def run(self, storage: DataFlowStorage, input_key: str = "math_problem") -> list:
         self.input_key = input_key
         dataframe = storage.read("dataframe")
         questions = dataframe[input_key]

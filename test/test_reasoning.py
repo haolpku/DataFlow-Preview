@@ -135,7 +135,6 @@ class ReasoningPipeline():
             answer_key = "generated_cot"
         )
         
-        
 model = ReasoningPipeline()
 model.forward()
 
