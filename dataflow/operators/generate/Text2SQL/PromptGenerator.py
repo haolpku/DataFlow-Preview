@@ -1,52 +1,28 @@
-from typing import Dict, Union, Optional, Tuple
-from dataflow.generator.utils.Prompts import FinalPromptGeneration
+from typing import Dict, Union, Optional, Tuple    
 from concurrent.futures import ThreadPoolExecutor, as_completed
 import pandas as pd
-from tqdm import tqdm
-from dataflow.generator.utils.Prompts import Text2SQLCotPrompt
-from dataflow.generator.utils.LocalModelGenerator import LocalModelGenerator
-from dataflow.generator.utils.APIGenerator_aisuite import APIGenerator_aisuite
-from dataflow.generator.utils.APIGenerator_request import APIGenerator_request
-from dataflow.utils.registry import GENERATOR_REGISTRY
-from dataflow.utils.utils import get_logger
-from dataflow.data import MyScaleStorage
 import sqlite3
 import os
 import re
+from tqdm import tqdm
+from dataflow.prompts.text2sql import Text2SQLCotPrompt
+from dataflow.prompts.text2sql import FinalPromptGeneration
+from dataflow.utils.registry import OPERATOR_REGISTRY
+from dataflow import get_logger
+from dataflow.core import OperatorABC
+from dataflow.core import LLMServingABC
+from dataflow.utils.storage import DataFlowStorage
 
-@GENERATOR_REGISTRY.register()
-class PromptGenerator:
-    def __init__(self, args: Dict):
-        self.config = args
+
+@OPERATOR_REGISTRY.register()
+class PromptGenerator(OperatorABC):
+    def __init__(self, llm_serving: LLMServingABC, db_root_path: str, num_threads: int = 5, timeout: int = 60):
+        self.llm_serving = llm_serving
         self.prompt = FinalPromptGeneration()
         self.cot_output = Text2SQLCotPrompt()
-        self.model_generator = self.__init_model__()
-
-        if "db_name" in args.keys():
-            self.storage = MyScaleStorage(args['db_port'], args['db_name'], args['table_name'])
-            self.input_file = None
-            self.output_file= None
-        else:
-            self.input_file = args.get("input_file")
-            self.output_file= args.get("output_file")
-        self.eval_stage = args.get('eval_stage', 2)
-        self.stage = args.get('stage', 0)
-        self.pipeline_id = args.get('pipeline_id', 'default_pipeline')
-
-        self.input_key = args.get("input_key", "data")
-        self.input_question_key = args.get('input_question_key', 'question')
-        self.input_sql_key = args.get('input_sql_key', 'SQL')
-        self.input_evidence_key = args.get('input_evidence_key', 'evidence')
-        self.input_schema_key = args.get('input_schema_key', 'schema')
-        self.num_threads = args.get('num_threads', 5)
-        self.timeout = args.get('timeout', 60)
-        self.db_root_path = args.get("db_root_path")  
-        self.input_dbid_key = args.get("input_dbid_key")
-        self.read_max_score = args.get("read_max_score")
-        self.read_min_score = args.get("read_min_score")
-        self.output_sft_prompt_key = args.get("output_sft_prompt_key")
-        self.output_rl_prompt_key = args.get("output_rl_prompt_key")
-        self.output_cot_key = args.get("output_cot_key")
+        self.num_threads = num_threads
+        self.timeout = timeout
+        self.db_root_path = db_root_path
         self.logger = get_logger()
 
     @staticmethod
@@ -96,50 +72,17 @@ class PromptGenerator:
         else:
             return "AnswerExtraction_qwenmatheval performs mathematical answer normalization and standardization."
 
-    def __init_model__(self) -> Union[LocalModelGenerator, APIGenerator_aisuite, APIGenerator_request]:
-        generator_type = self.config["generator_type"].lower()
-        if generator_type == "local":
-            return LocalModelGenerator(self.config)
-        elif generator_type == "aisuite":
-            return APIGenerator_aisuite(self.config)
-        elif generator_type == "request":
-            return APIGenerator_request(self.config)
-        raise ValueError(f"Invalid generator type: {generator_type}")
-    
-    def _load_input(self):
-        if hasattr(self, 'storage'):
-            value_list = self.storage.read_json(
-                [self.input_key], eval_stage=self.eval_stage, syn='syn_q', format='SFT_Single', maxmin_scores=[dict(zip(['min_score', 'max_score'], list(_))) for _ in list(zip(self.read_min_score, self.read_max_score))], stage=self.stage, pipeline_id=self.pipeline_id, category="text2sql_data"
-            )
-            return pd.DataFrame([
-                {**item['data'], 'id': str(item['id'])}
-                for item in value_list
-            ])
-        else:
-            return pd.read_json(self.input_file, lines=True)
-
-    def _write_output(self, save_path, dataframe, extractions):
-        if hasattr(self, 'storage'):
-            output_rows = dataframe.where(pd.notnull(dataframe), None).to_dict(orient="records")
-            self.storage.write_data(output_rows, format="SFT_Single", Synthetic='syn_qa', stage=self.stage+1)
-        else:
-            dataframe.to_json(save_path, orient="records", lines=True)
-
     def generate_prompt(self, item: Dict, prompt_type: str) -> str:
         generated_prompt = None
         if prompt_type == 'dail-sql':
             generated_prompt = self.prompt.dial_sql_cot_prompt(
                     question=item.get(self.input_question_key),
-                    sql=item.get(self.input_sql_key),
-                    schema=item.get(self.input_schema_key),
-                    evidence=item.get(self.input_evidence_key)
+                    schema=item.get(self.input_schema_key)
             )
         elif prompt_type == 'omni-sql':
             generated_prompt = self.prompt.omni_sql_cot_prompt(
                     question=item.get(self.input_question_key),
-                    sql=item.get(self.input_sql_key),
-                    schema=item.get(self.input_schema_key),
-                    evidence=item.get(self.input_evidence_key)
+                    schema=item.get(self.input_schema_key)
             )
         return generated_prompt
     
@@ -226,7 +169,7 @@ class PromptGenerator:
         
         while retry_count <= max_retries:
             try:
-                response = self.model_generator.generate_text_from_input([prompt])
+                response = self.llm_serving.generate_from_input([prompt])
                 parsed_response, flag = self._parse_response(response[0], gold_sql, db_path)
                 
                 if flag:
@@ -239,7 +182,7 @@ class PromptGenerator:
 
         try:
             backup_prompt = self.generate_cot_synthesis_prompts(item, True)
-            backup_response = self.model_generator.generate_text_from_input([backup_prompt])
+            backup_response = self.llm_serving.generate_from_input([backup_prompt])
             parsed_backup_response, success = self._parse_backup_response(backup_response[0])
             return parsed_backup_response if success and parsed_backup_response else ""
         except Exception as e:
@@ -259,35 +202,57 @@ class PromptGenerator:
             self.output_cot_key: cot_output if cot_output else ''
         }
 
-    def run(self) -> None:
+    def run(self, storage: DataFlowStorage, 
+            input_sql_key: str = "SQL",
+            input_question_key: str = "question",
+            input_dbid_key: str = "db_id",
+            input_schema_key: str = "ddl",
+            output_sft_prompt_key: str = "sft_prompt",
+            output_rl_prompt_key: str = "rl_prompt",
+            output_cot_key: str = "sft_output"
+        ):
+        self.input_question_key = input_question_key
+        self.input_sql_key = input_sql_key
+        self.input_schema_key = input_schema_key
+        self.input_dbid_key = input_dbid_key
+        self.output_sft_prompt_key = output_sft_prompt_key
+        self.output_rl_prompt_key = output_rl_prompt_key
+        self.output_cot_key = output_cot_key
+        
         self.logger.info("Starting prompt generation...")
-        items = self._load_input().to_dict('records')
-             
+        raw_dataframe = storage.read("dataframe")
+        items = raw_dataframe.to_dict('records')
+            
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = {
-                executor.submit(self._process_item, item): item['id']
-                for item in tqdm(items, desc="Submitting tasks", unit="item")
+                executor.submit(self._process_item, item): idx
+                for idx, item in enumerate(tqdm(items, desc="Submitting tasks", unit="item"))
             }
 
-            results = []
+            results = [None] * len(items)
+            
             with tqdm(total=len(futures), desc="Processing", unit="item") as pbar:
                 for future in as_completed(futures):
-                    item_id = futures[future]
+                    idx = futures[future]
                     try:
-                        results.append(future.result())
+                        results[idx] = future.result()
                     except Exception as e:
-                        self.logger.error(f"Error processing id={item_id}: {e}")
-                        original_item = next((item for item in items if item['id'] == item_id), None)
-                        if original_item:
-                            results.append({
-                                **original_item, 
-                                self.output_sft_prompt_key: "", 
-                                self.output_rl_prompt_key: "",
-                                self.output_cot_key: ""
-                            })
+                        self.logger.error(f"Error processing index={idx}: {e}")
+                        results[idx] = {
+                            **items[idx], 
+                            self.output_sft_prompt_key: "", 
+                            self.output_rl_prompt_key: "",
+                            self.output_cot_key: ""
+                        }
                     
                     pbar.update(1)
 
-        id_to_index = {item['id']: idx for idx, item in enumerate(items)}
-        results.sort(key=lambda x: id_to_index[x['id']]) 
-        self._write_output(self.output_file, pd.DataFrame(results), None)
+        final_results = [r for r in results if r is not None]
+        
+        if len(final_results) != len(items):
+            self.logger.warning(f"Results count mismatch: expected {len(items)}, got {len(final_results)}")
+        
+        output_file = storage.write(pd.DataFrame(final_results))
+        self.logger.info(f"Prompt generation completed, saved to {output_file}")
+
+        return [self.output_sft_prompt_key, self.output_rl_prompt_key, self.output_cot_key]

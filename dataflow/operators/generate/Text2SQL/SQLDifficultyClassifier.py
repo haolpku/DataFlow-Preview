@@ -4,9 +4,10 @@ import os
 import pandas as pd
 import sqlite3
 import re
-from dataflow.utils.registry import GENERATOR_REGISTRY
-from dataflow.utils.utils import get_logger
-from dataflow.data import MyScaleStorage
+from dataflow.utils.registry import OPERATOR_REGISTRY
+from dataflow import get_logger
+from dataflow.core import OperatorABC
+from dataflow.utils.storage import DataFlowStorage
 
 
 class Schema:
@@ -26,7 +27,6 @@ class Schema:
         return self._idMap
 
     def _normalize_schema(self, schema):
-        # 所有表名和列名做 lower 和 strip 处理
         normalized = {}
         for table, cols in schema.items():
             table_clean = table.strip().lower()
@@ -72,11 +72,10 @@ class EvalHardness:
         string = str(self.query)
         vals = {}
 
-        # 替换被 '、"、` 包裹的内容，标记类型
         def replace_literal(match):
             val = match.group(0)
             quote = val[0]
-            content = val[1:-1]  # 去除引号
+            content = val[1:-1] 
 
             if quote == '`':
                 key = f"__col_{len(vals)}__"
@@ -86,16 +85,13 @@ class EvalHardness:
             vals[key] = content
             return key
 
-        # 正则提取引号内容
         string = re.sub(r"(['\"`])(?:\\.|[^\\])*?\1", replace_literal, string)
 
         toks = [word.lower() for word in word_tokenize(string)]
-        # replace with string value token
         for i in range(len(toks)):
             if toks[i] in vals:
                 toks[i] = vals[toks[i]]
 
-        # find if there exists !=, >=, <=
         eq_idxs = [idx for idx, tok in enumerate(toks) if tok == "="]
         eq_idxs.reverse()
         prefix = ('!', '>', '<')
@@ -129,7 +125,7 @@ class EvalHardness:
         if tok == "*":
             return start_idx + 1, schema.idMap[tok]
 
-        if '.' in tok:  # if token is a composite
+        if '.' in tok:  
             alias, col = tok.split('.')
             key = tables_with_alias[alias] + "." + col
             return start_idx+1, schema.idMap[key]
@@ -157,7 +153,6 @@ class EvalHardness:
             idx += 1
 
             if func_name == 'cast':
-                # 解析 cast(col as type)
                 idx, col_id = self.parse_col(toks, idx, tables_with_alias, schema, default_tables)
                 assert toks[idx] == 'as'
                 idx += 1
@@ -170,9 +165,7 @@ class EvalHardness:
                 return idx, (self.AGG_OPS.index("none"), func_call, False)
 
             else:
-                # 其他函数比如 round(col, 2)
                 idx, col_id = self.parse_col(toks, idx, tables_with_alias, schema, default_tables)
-                # 跳过逗号和其他参数（简单版本）
                 while toks[idx] != ')':
                     idx += 1
                 idx += 1
@@ -220,7 +213,6 @@ class EvalHardness:
             idx += 1
 
             if func_name == 'cast':
-                # 解析 cast(col as type)
                 idx, col_id = self.parse_col(toks, idx, tables_with_alias, schema, default_tables)
                 assert toks[idx] == 'as'
                 idx += 1
@@ -233,9 +225,7 @@ class EvalHardness:
                 return idx, (self.AGG_OPS.index("none"), func_call, False)
 
             else:
-                # 其他函数比如 round(col, 2)
                 idx, col_id = self.parse_col(toks, idx, tables_with_alias, schema, default_tables)
-                # 跳过逗号和其他参数（简单版本）
                 while toks[idx] != ')':
                     idx += 1
                 idx += 1
@@ -293,12 +283,11 @@ class EvalHardness:
         if toks[idx] == 'select':
             idx, val = self.parse_sql(toks, idx, tables_with_alias, schema)
         elif isinstance(toks[idx], str) and toks[idx] not in schema.idMap:
-            # 字符串字面值（非列名）
             val = toks[idx]
             idx += 1
         else:
             try:
-                val = float(toks[idx])  # 数字
+                val = float(toks[idx])  
                 idx += 1
             except:
                 end_idx = idx
@@ -330,12 +319,12 @@ class EvalHardness:
             op_id = self.WHERE_OPS.index(toks[idx])
             idx += 1
             val1 = val2 = None
-            if op_id == self.WHERE_OPS.index('between'):  # between..and... special case: dual values
+            if op_id == self.WHERE_OPS.index('between'): 
                 idx, val1 = self.parse_value(toks, idx, tables_with_alias, schema, default_tables)
                 assert toks[idx] == 'and'
                 idx += 1
                 idx, val2 = self.parse_value(toks, idx, tables_with_alias, schema, default_tables)
-            else:  # normal case: single value
+            else:  
                 idx, val1 = self.parse_value(toks, idx, tables_with_alias, schema, default_tables)
                 val2 = None
 
@@ -458,7 +447,7 @@ class EvalHardness:
         idx = start_idx
         len_ = len(toks)
         val_units = []
-        order_type = 'asc' # default type is 'asc'
+        order_type = 'asc' 
 
         if idx >= len_ or toks[idx] != 'order':
             return idx, val_units
@@ -499,7 +488,6 @@ class EvalHardness:
 
         if idx < len_ and toks[idx] == 'limit':
             idx += 2
-            # make limit value can work, cannot assume put 1 as a fake limit number
             if type(toks[idx-1]) != int:
                 return idx, 1
 
@@ -526,7 +514,6 @@ class EvalHardness:
             isBlock = True
             idx += 1
 
-        # parse from clause in order to get default tables
         from_end_idx, table_units, conds, default_tables = self.parse_from(toks, start_idx, tables_with_alias, schema)
         sql['from'] = {'table_units': table_units, 'conds': conds}
         # select clause
@@ -677,23 +664,19 @@ class EvalHardnessLite:
         sql = self.sql
         score = 0
 
-        # 子查询检测
         if self.match(r'\( *select'):
             score += 2
 
-        # 多表 JOIN 检测
         if self.count_keyword(' join ') > 0:
             score += self.count_keyword(' join ')
         if self.count_keyword(',') > 0 and 'from' in sql:
-            score += 1  # 暂定认为逗号连接表增加复杂度
+            score += 1 
 
-        # 条件检测
         if self.count_keyword(' and ') + self.count_keyword(' or ') >= 2:
             score += 1
         if any(kw in sql for kw in ['in', 'exists', 'like']):
             score += 1
 
-        # 分组和聚合
         if 'group by' in sql:
             score += 1
         if 'having' in sql:
@@ -730,36 +713,12 @@ class EvalHardnessLite:
         else:
             return 'extra'
 
-@GENERATOR_REGISTRY.register()
-class SQLDifficultyClassifier:
-    def __init__(self, args: dict):
-        '''
-        Initialize the SQLDifficultyClassifier with the provided configuration.
-        '''
-        if "db_name" in args.keys():
-            self.storage = MyScaleStorage(args['db_port'], args['db_name'], args['table_name'])
-            self.input_file = None
-            self.output_file= None
-        else:
-            self.input_file = args.get("input_file")
-            self.output_file= args.get("output_file")
 
-        self.eval_stage = args.get('eval_stage', 2)
-        self.stage = args.get('stage', 0)
-        self.pipeline_id = args.get('pipeline_id', 'default_pipeline')
-
-        self.input_key = args.get("input_key", "data")
-        self.input_sql_key = args.get("input_sql_key", "SQL")
-        self.output_key = args.get("output_key", "sql_difficulty")
-        self.read_max_score = args.get("read_max_score")
-        self.read_min_score = args.get("read_min_score")
-        # 映射关系
-        self.difficulty_map = {
-            "easy": 0,
-            "medium": 1,
-            "hard": 2,
-            "extra": 3
-        }
+@OPERATOR_REGISTRY.register()
+class SQLDifficultyClassifier(OperatorABC):
+    def __init__(self, max_score: int = 2.0, min_score: int = 0.9):
+        self.max_score = max_score
+        self.min_score = min_score
         self.logger = get_logger()
 
     @staticmethod
@@ -784,34 +743,6 @@ class SQLDifficultyClassifier:
             )
         else:
             return "AnswerExtraction_qwenmatheval performs mathematical answer normalization and standardization."
-        
-    def _load_input(self):
-        if hasattr(self, 'storage'):
-            value_list = self.storage.read_json(
-                [self.input_key], eval_stage=self.eval_stage, syn='', format='PT', maxmin_scores=[dict(zip(['min_score', 'max_score'], list(_))) for _ in list(zip(self.read_min_score, self.read_max_score))], stage=self.stage, pipeline_id=self.pipeline_id, category="text2sql_data"
-            )
-            return pd.DataFrame([
-                {**item['data'], 'id': str(item['id'])}
-                for item in value_list
-            ])
-        else:
-            return pd.read_json(self.input_file, lines=True)
-
-    def _write_output(self, save_path, dataframe, extractions):
-        if hasattr(self, 'storage'):
-            output_rows = dataframe.where(pd.notnull(dataframe), None).to_dict(orient="records")
-            output_rows = [
-                {
-                    "id": row.get("id"),
-                    "difficulty_score": int(self.difficulty_map.get(row.get(self.output_key)))
-                }
-                for row in output_rows
-            ]
-            self.storage.write_eval(output_rows, algo_name="SQLDifficultyClassifier", score_key="difficulty_score", stage=self.stage+1)
-        else:
-            output_dir = os.path.dirname(save_path)
-            os.makedirs(output_dir, exist_ok=True)
-            dataframe.to_json(self.output_file, orient="records", lines=True, force_ascii=False)
 
     def get_schema(self, db):
         """
@@ -825,11 +756,9 @@ class SQLDifficultyClassifier:
         conn = sqlite3.connect(db)
         cursor = conn.cursor()
 
-        # fetch table names
         cursor.execute("SELECT name FROM sqlite_master WHERE type='table';")
         tables = [str(table[0].lower()) for table in cursor.fetchall()]
 
-        # fetch table info
         for table in tables:
             cursor.execute("PRAGMA table_info({})".format(table))
             schema[table] = [str(col[1].lower()) for col in cursor.fetchall()]
@@ -840,51 +769,27 @@ class SQLDifficultyClassifier:
         '''
         print the statistics of the SQL difficulty.
         '''
-        counts = dataframe[self.output_key].value_counts()
+        counts = dataframe[self.output_difficulty_key].value_counts()
         self.logger.info("SQL Difficulty Statistics")
         difficulty_counts = {d: counts.get(d, 0) for d in ['easy', 'medium', 'hard', 'extra']}
         self.logger.info(" | ".join([f"{d.title()}: {v}" for d, v in difficulty_counts.items()]))
     
-    def run(self):
-        '''
-        Runs the TextSQLDifficultyClassifier, reading from the input file and saving results to output.
-        '''
-        # Read input file: only accept jsonl format
-        dataframe = self._load_input()
+    def run(self, storage: DataFlowStorage,
+            input_sql_key: str = "SQL",
+            output_difficulty_key: str = "sql_component_difficulty"):
         
-        # Ensure the input and output keys are correctly set
-        self._validate_dataframe(dataframe)
-
-        # Process each row in the DataFrame
-        # for idx, row in dataframe.iterrows():
+        self.input_sql_key = input_sql_key
+        self.output_difficulty_key = output_difficulty_key
+        dataframe = storage.read("dataframe")
+        
         for idx, row in tqdm(dataframe.iterrows(), total=len(dataframe), desc="Processing"):
-            # db = os.path.join(self.db_root_path, row[self.input_dbid_key], row[self.input_dbid_key] + ".sqlite")
-            # schema = Schema(self.get_schema(db))
             sql = row.get(self.input_sql_key)
-            # sql_hardness = EvalHardness(schema, sql)
             sql_hardness = EvalHardnessLite(sql)
             hardness = sql_hardness.run()
-            dataframe.at[idx, self.output_key] = hardness
+            dataframe.at[idx, self.output_difficulty_key] = hardness
 
-        # Save DataFrame to JSON file
         self.report_statistics(dataframe)
-        self._write_output(self.output_file, dataframe, None)
+        output_file = storage.write(dataframe)
+        self.logger.info(f"Extracted answers saved to {output_file}")
 
-        
-    def _validate_dataframe(self, dataframe: pd.DataFrame):
-        '''
-        Helper method to validate the input dataframe columns.
-        '''
-        # Check if the input sql key exists in the dataframe
-        if self.input_sql_key not in dataframe.columns:
-            self.logger.error(f"input_sql_key: {self.input_sql_key} not found in the dataframe.")
-            raise ValueError(f"input_sql_key: {self.input_sql_key} not found in the dataframe.")
-        
-        # Check if the input dbid key exists in the dataframe
-        # if self.input_dbid_key not in dataframe.columns:
-        #     raise ValueError(f"input_dbid_key: {self.input_dbid_key} not found in the dataframe.")
-
-        # Check if the output key already exists in the dataframe
-        if self.output_key in dataframe.columns:
-            self.logger.warning(f"Found {self.output_key} in the dataframe, which would overwrite an existing column. Please use a different output_key.")
-            raise ValueError(f"Found {self.output_key} in the dataframe, which would overwrite an existing column. Please use a different output_key.")
+        return [self.output_difficulty_key]

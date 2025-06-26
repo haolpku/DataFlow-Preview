@@ -2,41 +2,22 @@ from typing import Dict, Union
 import pandas as pd
 from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataflow.utils.registry import GENERATOR_REGISTRY
-from dataflow.generator.utils.Prompts import QuestionRefinePrompt
-from dataflow.generator.utils.APIGenerator_request import APIGenerator_request
-from dataflow.generator.utils.LocalModelGenerator import LocalModelGenerator
-from dataflow.generator.utils.APIGenerator_aisuite import APIGenerator_aisuite
-from dataflow.utils.utils import get_logger
-from dataflow.data import MyScaleStorage
+from dataflow.prompts.text2sql import QuestionRefinePrompt
+from dataflow.utils.registry import OPERATOR_REGISTRY
+from dataflow import get_logger
+from dataflow.core import OperatorABC
+from dataflow.core import LLMServingABC
+from dataflow.utils.storage import DataFlowStorage
 
-@GENERATOR_REGISTRY.register()
-class QuestionRefiner:
-    def __init__(self, args: Dict):        
-        self.config = args
+
+@OPERATOR_REGISTRY.register()
+class QuestionRefiner(OperatorABC):
+    def __init__(self, llm_serving: LLMServingABC, num_threads: int = 5, max_retries: int = 3): 
+        self.llm_serving = llm_serving       
         self.prompt = QuestionRefinePrompt()
-        self.model_generator = self.__init_model__()
-
-        if "db_name" in args.keys():
-            self.storage = MyScaleStorage(args['db_port'], args['db_name'], args['table_name'])
-            self.input_file = None
-            self.output_file= None
-        else:
-            self.input_file = args.get("input_file")
-            self.output_file= args.get("output_file")
-        self.eval_stage = args.get('eval_stage', 2)
-        self.stage = args.get('stage', 0)
-        self.pipeline_id = args.get('pipeline_id', 'default_pipeline')
-
-        self.input_key = args.get("input_key", "data")
-        self.output_refined_question_key = args.get('output_refined_question_key')
-        self.input_db_key = args.get('input_db_key', 'id')
-        self.num_threads = args.get('num_threads', 5)
-        self.max_retries = args.get('max_retries', 3)
-        self.input_question_key = args.get('input_question_key', 'question')
-        self.read_max_score = args.get("read_max_score")
-        self.read_min_score = args.get("read_min_score")
         self.logger = get_logger()
+        self.num_threads = num_threads
+        self.max_retries = max_retries
 
     @staticmethod
     def get_desc(lang):
@@ -60,36 +41,6 @@ class QuestionRefiner:
             )
         else:
             return "AnswerExtraction_qwenmatheval performs mathematical answer normalization and standardization."
-
-
-    def __init_model__(self) -> Union[LocalModelGenerator, APIGenerator_aisuite, APIGenerator_request]:
-        generator_type = self.config["generator_type"].lower()
-        if generator_type == "local":
-            return LocalModelGenerator(self.config)
-        elif generator_type == "aisuite":
-            return APIGenerator_aisuite(self.config)
-        elif generator_type == "request":
-            return APIGenerator_request(self.config)
-        raise ValueError(f"Invalid generator type: {generator_type}")
-
-    def _load_input(self):
-        if hasattr(self, 'storage'):
-            value_list = self.storage.read_json(
-                [self.input_key], eval_stage=self.eval_stage, syn='', format='PT', maxmin_scores=[dict(zip(['min_score', 'max_score'], list(_))) for _ in list(zip(self.read_min_score, self.read_max_score))], stage=self.stage, pipeline_id=self.pipeline_id, category="text2sql_data"
-            )
-            return pd.DataFrame([
-                {**item['data'], 'id': str(item['id'])}
-                for item in value_list
-            ])
-        else:
-            return pd.read_json(self.input_file, lines=True)
-
-    def _write_output(self, save_path, dataframe, extractions):
-        if hasattr(self, 'storage'):
-            output_rows = dataframe.where(pd.notnull(dataframe), None).to_dict(orient="records")
-            self.storage.write_data(output_rows, format="SFT_Single", Synthetic='syn_q', stage=self.stage+1)
-        else:
-            dataframe.to_json(save_path, orient="records", lines=True)
 
     def _generate_prompt(self, item: Dict) -> str:
         return self.prompt.question_refine_prompt(item['question'])
@@ -115,7 +66,7 @@ class QuestionRefiner:
     def _process_item_with_retry(self, item: Dict, retry_count: int = 2) -> Dict:
         try:
             prompt = self._generate_prompt(item)
-            response = self.model_generator.generate_text_from_input([prompt])
+            response = self.llm_serving.generate_from_input([prompt])
             parsed_response = self._parse_response(response[0], item['question'])
             
             return {
@@ -127,42 +78,50 @@ class QuestionRefiner:
             if retry_count < self.max_retries:
                 self.logger.warning(f"Retrying {item.get('id')} (attempt {retry_count + 1}): {str(e)}")
                 return self._process_item_with_retry(item, retry_count + 1)
-            # self.logger.error(f"Failed after {self.max_retries} retries for item: {e}")
 
             return {
                 **item,
                 self.output_refined_question_key: item['question']
             }
 
-    def run(self) -> None:
+    def run(self, storage: DataFlowStorage,
+            input_question_key: str = "question",
+            output_refined_question_key: str = "refined_question"
+        ):
+        self.input_question_key = input_question_key
+        self.output_refined_question_key = output_refined_question_key
+
         self.logger.info("Starting QuestionRefiner...")
-        items = self._load_input().to_dict('records')
-                        
+        raw_dataframe = storage.read("dataframe")
+        items = raw_dataframe.to_dict('records')
+        
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = {
-                executor.submit(self._process_item_with_retry, item): item['id']
-                for item in tqdm(items, desc="Submitting tasks", unit="item")
+                executor.submit(self._process_item_with_retry, item): idx
+                for idx, item in enumerate(tqdm(items, desc="Submitting tasks", unit="item"))
             }
 
-            results = []
+            results = [None] * len(items)
+            
             with tqdm(total=len(items), desc="Processing items", unit="item") as pbar:
                 for future in as_completed(futures):
-                    item_id = futures[future]
+                    idx = futures[future]
                     try:
-                        results.append(future.result())
+                        results[idx] = future.result()
                     except Exception as e:
-                        self.logger.error(f"Fatal error for id={item_id}: {e}")
-                        original_item = next((item for item in items if item['id'] == item_id), None)
-                        if original_item:
-                            results.append(
-                                {
-                                    **original_item, 
-                                    self.output_refined_question_key: original_item[self.input_question_key]
-                                }
-                            )
-                        
+                        self.logger.error(f"Fatal error for index={idx}: {e}")
+                        results[idx] = {
+                            **items[idx], 
+                            self.output_refined_question_key: items[idx][self.input_question_key]
+                        }
                     pbar.update(1)
 
-        id_to_index = {item['id']: idx for idx, item in enumerate(items)}
-        results.sort(key=lambda x: id_to_index[x['id']]) 
-        self._write_output(self.output_file, pd.DataFrame(results), None)
+        results = [r for r in results if r is not None]
+        
+        if len(results) != len(items):
+            self.logger.warning(f"Results count mismatch: expected {len(items)}, got {len(results)}")
+        
+        output_file = storage.write(pd.DataFrame(results))
+        self.logger.info(f"Refined questions saved to {output_file}")
+
+        return [self.output_refined_question_key]

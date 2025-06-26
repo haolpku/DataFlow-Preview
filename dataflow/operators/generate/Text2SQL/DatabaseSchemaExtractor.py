@@ -4,41 +4,19 @@ import sqlite3
 from tqdm import tqdm
 from typing import Dict
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataflow.utils.registry import GENERATOR_REGISTRY
-from dataflow.utils.utils import get_logger
-from dataflow.data import MyScaleStorage
+from dataflow.utils.registry import OPERATOR_REGISTRY
+from dataflow import get_logger
+from dataflow.core import OperatorABC
+from dataflow.utils.storage import DataFlowStorage
 
-@GENERATOR_REGISTRY.register()
-class DatabaseSchemaExtractor:
-    def __init__(self, args: Dict):
-        if "db_name" in args.keys():
-            self.storage = MyScaleStorage(args['db_port'], args['db_name'], args['table_name'])
-            self.input_file = None
-            self.output_file= None
-        else:
-            self.input_file = args.get("input_file")
-            self.output_file= args.get("output_file")
-        self.eval_stage = args.get('eval_stage', 2)
-        self.stage = args.get('stage', 0)
-        self.pipeline_id = args.get('pipeline_id', 'default_pipeline')
 
-        self.table_schema_path = args.get('table_schema_path')
-        self.output_raw_schema_key = args.get('output_raw_schema_key')
-        self.output_ddl_key = args.get('output_ddl_key')
-        self.output_whole_format_schema_key = args.get('output_whole_format_schema_key')
-        self.output_selected_format_schema_key = args.get('output_selected_format_schema_key')
-
-        self.input_key = args.get("input_key", "data")
-        self.input_db_key = args.get('input_db_key')
-        self.input_question_key = args.get('input_question_key')
-        self.input_sql_key = args.get('input_sql_key')
-        self.table_schema_file_db_key = args.get('table_schema_file_db_key')
-        self.database_base_path = args.get('database_base_path')
-        self.num_threads = args.get('num_threads', 5)
-        self.read_max_score = args.get("read_max_score")
-        self.read_min_score = args.get("read_min_score")
+@OPERATOR_REGISTRY.register()
+class DatabaseSchemaExtractor(OperatorABC):
+    def __init__(self, table_info_file: str, db_root_path: str, num_threads: int = 5):
+        self.table_schema_path = table_info_file
+        self.database_base_path = db_root_path
+        self.num_threads = num_threads
         self._schema_cache = {}
-
         self.logger = get_logger()
 
     @staticmethod
@@ -81,25 +59,6 @@ class DatabaseSchemaExtractor:
             )
         else:
             return "AnswerExtraction_qwenmatheval performs mathematical answer normalization and standardization."
-    
-    def _load_input(self):
-        if hasattr(self, 'storage'):
-            value_list = self.storage.read_json(
-                [self.input_key], eval_stage=self.eval_stage, syn='', format='PT', maxmin_scores=[dict(zip(['min_score', 'max_score'], list(_))) for _ in list(zip(self.read_min_score, self.read_max_score))], stage=self.stage, pipeline_id=self.pipeline_id, category="text2sql_data"
-            )
-            return pd.DataFrame([
-                {**item['data'], 'id': str(item['id'])}
-                for item in value_list
-            ])
-        else:
-            return pd.read_json(self.input_file, lines=True)
-
-    def _write_output(self, save_path, dataframe, extractions):
-        if hasattr(self, 'storage'):
-            output_rows = dataframe.where(pd.notnull(dataframe), None).to_dict(orient="records")
-            self.storage.write_data(output_rows, format="PT", Synthetic='', stage=self.stage+1)
-        else:
-            dataframe.to_json(save_path, orient="records", lines=True)
 
     def collect_schema(self, db_id: str) -> Dict:
         if db_id in self._schema_cache:
@@ -130,7 +89,6 @@ class DatabaseSchemaExtractor:
                     
                 table_idx = db_info["column_names_original"][i][0]
                 table_name = table_names[table_idx]
-                # col_name = db_info["column_names_original"][i][1].replace(" ", "_")
                 col_name = db_info["column_names_original"][i][1]
                 col_type = db_info["column_types"][i]
                 
@@ -318,29 +276,49 @@ class DatabaseSchemaExtractor:
                 self.output_whole_format_schema_key: ""
             }
 
-    def run(self) -> None:
-        self.logger.info("Starting DatabaseSchemaExtractor")
-        items = self._load_input().to_dict(orient='records')
-        # print(f"Loaded {len(items)} items. Sample: {items[0]}")
+    def run(self, storage: DataFlowStorage,
+            input_db_key: str = "db_id", 
+            table_schema_file_db_key: str = "db_id",
+            selected_schema_key: str = "selected_schema",
+            output_raw_schema_key: str = "whole_schema",
+            output_ddl_key: str = "ddl",
+            output_whole_format_schema_key: str ="whole_format_schema"
+        ):
+        self.input_db_key = input_db_key
+        self.output_raw_schema_key = output_raw_schema_key
+        self.output_ddl_key = output_ddl_key
+        self.output_whole_format_schema_key = output_whole_format_schema_key
+        self.output_selected_format_schema_key = selected_schema_key
+        self.table_schema_file_db_key = table_schema_file_db_key
+
+        raw_dataframe = storage.read("dataframe")
+        items = raw_dataframe.to_dict(orient='records')
 
         with ThreadPoolExecutor(max_workers=self.num_threads) as executor:
             futures = {
-                executor.submit(self._process_item, item): item['id'] 
-                for item in tqdm(items, desc="Submitting tasks", unit="item")
+                executor.submit(self._process_item, item): idx 
+                for idx, item in enumerate(tqdm(items, desc="Submitting tasks", unit="item"))
             }
             
-            results = []
+            results = [None] * len(items)
+            
             with tqdm(total=len(items), desc="Processing") as pbar:
                 for future in as_completed(futures):
-                    item_id = futures[future]
+                    idx = futures[future]
                     try:
-                        results.append(future.result())
+                        result = future.result()
+                        results[idx] = result
                     except Exception as e:
-                        self.logger.error(f"Error processing id={item_id}: {e}")
-                        results.append({'id': item_id, 'error': str(e)}) 
+                        self.logger.error(f"Error processing index={idx}: {e}")
+                        error_result = items[idx].copy()
+                        error_result['_error'] = str(e)
+                        results[idx] = error_result
                         
                     pbar.update(1)
         
-        id_to_index = {item['id']: idx for idx, item in enumerate(items)}
-        results.sort(key=lambda x: id_to_index[x['id']]) 
-        self._write_output(self.output_file, pd.DataFrame(results), None)
+        results = [r for r in results if r is not None]
+        
+        output_file = storage.write(pd.DataFrame(results))
+        self.logger.info(f"Extracted answers saved to {output_file}")
+
+        return [self.output_raw_schema_key, self.output_ddl_key, self.output_whole_format_schema_key]

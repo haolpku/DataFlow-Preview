@@ -1,6 +1,7 @@
 import sys
 from dataflow.utils.registry import LazyLoader
 from .Reasoning import *
+from .Text2SQL import *
 
 cur_path = "dataflow/operators/generate/"
 _import_structure = {
@@ -18,7 +19,6 @@ _import_structure = {
     "SQLDifficultyClassifier": (cur_path + "Text2SQL/SQLDifficultyClassifier.py", "SQLDifficultyClassifier"),
     "SQLFilter": (cur_path + "Text2SQL/SQLFilter.py", "SQLFilter"),
     "Text2SQLDifficultyClassifier": (cur_path + "Text2SQL/Text2SQLDifficultyClassifier.py", "Text2SQLDifficultyClassifier"),
-
 }
 
 sys.modules[__name__] = LazyLoader(__name__, "dataflow/operators/generate/", _import_structure)

@@ -5,40 +5,8 @@ class TextSQLConsistencyPrompt:
     def __init__(self):
         pass
 
-    def text_sql_consistency_prompt(self, question, sql, evidence):
-        if evidence != "":
-            prompt = f"""
-            ## SQL Consistency Verification Task
-            
-            **Objective**: Given the question, evidence and SQL query, determine if the SQL query correctly implements the requirements specified in the natural language Question.
-            
-            **Evaluation Criteria**:
-            1. The SQL should reflect key elements from the Question:
-            2. You can refer to the content in evidence to determine if the SQL meets the requirements of the question
-            3. Since you are not given the database schema, you can only analyze the SQL query and its relation to the Question and evidence.
-            4. Do not judge as inconsistent just because of the database schema
-            
-            **Input**:
-            Question: {question}
-            Evidence: {evidence}
-            SQL: {sql}
-            
-            **Required Output Format**:
-            Analysis: <Brief technical analysis of the alignment between Question and SQL>
-            Conclusion: <"YES" if consistent or uncertain, "NO" if definitely inconsistent> (No other text)
-            
-            **Example**:
-            Analysis: The SQL query correctly implements the requirements of the Question, (may be more).
-            Conclusion: <YES>
-            
-            **Important Notes**:
-            - Respond ONLY with the specified format above
-            - "YES" should be used when SQL implements Question OR when you're uncertain
-            - "NO" should be used when SQL contradicts the Question
-            - Be strict with logical requirements but lenient with syntax variations
-            """
-        else:
-            prompt = f"""
+    def text_sql_consistency_prompt(self, question, sql):
+        prompt = f"""
             ## SQL Consistency Verification Task
             
             **Objective**: Given the question and SQL query, determine if the SQL query correctly implements the requirements specified in the natural language Question.
@@ -119,7 +87,7 @@ class FinalPromptGeneration:
     def __init__(self):
         pass
 
-    def dial_sql_cot_prompt(self, question, sql, schema, evidence):
+    def dial_sql_cot_prompt(self, question, schema):
         prompt = (
             "/* Given the following database schema: */\n"
             f"{schema}\n\n"
@@ -129,7 +97,7 @@ class FinalPromptGeneration:
 
         return prompt
     
-    def dial_sql_non_cot_prompt(self, question, sql, schema, evidence):
+    def dial_sql_non_cot_prompt(self, question, schema):
         prompt = (
             "/* Given the following database schema: */\n"
             f"{schema}\n\n"
@@ -139,7 +107,7 @@ class FinalPromptGeneration:
 
         return prompt
     
-    def omni_sql_cot_prompt(self, question, sql, schema, evidence):
+    def omni_sql_cot_prompt(self, question, schema):
         prompt = (
             "Task Overview:\n"
             "You are a data science expert. Below, you are provided with a database schema and a natural language question. Your task is to understand the schema and generate a valid SQL query to answer the question.\n\n"
@@ -161,7 +129,7 @@ class FinalPromptGeneration:
 
         return prompt
     
-    def omni_sql_non_cot_prompt(self, question, sql, schema, evidence):
+    def omni_sql_non_cot_prompt(self, question, schema):
         prompt = (
             "Task Overview:\n"
             "You are a data science expert. Below, you are provided with a database schema and a natural language question. Your task is to understand the schema and generate a valid SQL query to answer the question.\n\n"
