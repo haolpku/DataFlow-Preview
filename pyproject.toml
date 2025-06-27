@@ -48,4 +48,4 @@ packages = ["dataflow"]  # 显式指定主包
 [tool.setuptools.dynamic]
 version = {attr = "dataflow.version.__version__"}
 dependencies = {file = "requirements.txt"}
-optional-dependencies = { all = {file = "requirements-all.txt"}, text = {file = "requirements-text.txt"}, min = {file = "requirements-min.txt"} }
+optional-dependencies = { all = {file = "requirements-all.txt"}, muxi = {file = "requirements-muxi.txt"}, min = {file = "requirements-min.txt"} }
