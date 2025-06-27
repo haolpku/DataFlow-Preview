@@ -4,7 +4,6 @@ scipy
 torch
 tqdm
 transformers
-vllm==0.6.3
 aisuite
 math_verify
 word2number
@@ -18,6 +17,9 @@ addict
 pytest
 rich
 docstring_parser
+pydantic
 # text2sql
 nltk
 func_timeout
+
+

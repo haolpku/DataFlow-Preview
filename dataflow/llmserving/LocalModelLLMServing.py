@@ -19,6 +19,7 @@ class LocalModelLLMServing(LLMServingABC):
                  seed: int = 42,
                  download_dir: str = "./ckpt/models/",
                  max_model_len: int = 4096,
+                 gpu_memory_utilization: float=0.9,
                  model_source: str= "remote",
                  ):
 
@@ -49,6 +50,7 @@ class LocalModelLLMServing(LLMServingABC):
             model=self.real_model_path,
             tensor_parallel_size=tensor_parallel_size,
             max_model_len=max_model_len,
+            gpu_memory_utilization=gpu_memory_utilization,
         )
     def generate(self):
         # # read input file : accept jsonl file only
