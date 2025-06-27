@@ -4,7 +4,7 @@ from dataflow.llmserving import APILLMServing_request
 
 
 class Text2SQLPipeline():
-    def __init__(self):
+    def __init__(self,llm_serving=None):
 
         self.storage = FileStorage(
             first_entry_file_name="../dataflow/example/Text2SQLPipeline/pipeline.json",
@@ -12,12 +12,14 @@ class Text2SQLPipeline():
             file_name_prefix="dataflow_cache_step",
             cache_type="jsonl",
         )
-
-        api_llm_serving = APILLMServing_request(
-            api_url="http://123.129.219.111:3000/v1/chat/completions",
-            model_name="gpt-4o",
-            max_workers=100
-        )
+        if llm_serving is None:
+            api_llm_serving = APILLMServing_request(
+                api_url="http://123.129.219.111:3000/v1/chat/completions",
+                model_name="gpt-4o",
+                max_workers=100
+            )
+        else:
+            api_llm_serving = llm_serving
 
         db_root_path = "../dataflow/example/Text2SQLPipeline/dev_databases"
         table_info_file = "../dataflow/example/Text2SQLPipeline/dev_tables.jsonl"
@@ -31,13 +33,13 @@ class Text2SQLPipeline():
 
         self.sql_difficulty_classifier_step2 = SQLDifficultyClassifier()
 
-        self.schema_linking_step3 = SchemaLinking(
-            table_info_file=table_info_file,
-            model_path="", # download the model from https://pan.quark.cn/s/418c417127ae or https://drive.google.com/file/d/1xzNvv5h-ZjhjOOZ-ePv1xg_n3YbUNLWi/view?usp=sharing
-            selection_mode="eval",                       
-            num_top_k_tables=5,                           
-            num_top_k_columns=5     
-        )
+        # self.schema_linking_step3 = SchemaLinking(
+        #     table_info_file=table_info_file,
+        #     model_path="", # download the model from https://pan.quark.cn/s/418c417127ae or https://drive.google.com/file/d/1xzNvv5h-ZjhjOOZ-ePv1xg_n3YbUNLWi/view?usp=sharing
+        #     selection_mode="eval",                       
+        #     num_top_k_tables=5,                           
+        #     num_top_k_columns=5     
+        # )
 
         self.database_schema_extractor_step4 = DatabaseSchemaExtractor(
             table_info_file=table_info_file,
@@ -91,17 +93,17 @@ class Text2SQLPipeline():
             output_difficulty_key="sql_component_difficulty"
         )
 
-        self.schema_linking_step3.run(
-            storage=self.storage.step(),
-            input_sql_key=input_sql_key,
-            input_dbid_key=input_dbid_key,
-            input_question_key=input_question_key,
-            input_table_names_original_key="table_names_original",
-            input_table_names_statement_key="table_names",
-            input_column_names_original_key="column_names_original",    
-            input_column_names_statement_key="column_names",
-            output_schema_key="selected_schema"        
-        )
+        # self.schema_linking_step3.run(
+        #     storage=self.storage.step(),
+        #     input_sql_key=input_sql_key,
+        #     input_dbid_key=input_dbid_key,
+        #     input_question_key=input_question_key,
+        #     input_table_names_original_key="table_names_original",
+        #     input_table_names_statement_key="table_names",
+        #     input_column_names_original_key="column_names_original",    
+        #     input_column_names_statement_key="column_names",
+        #     output_schema_key="selected_schema"        
+        # )
 
         self.database_schema_extractor_step4.run(
             storage=self.storage.step(),
@@ -145,7 +147,7 @@ class Text2SQLPipeline():
             output_difficulty_key="sql_execution_difficulty"
         )
         
-        
-model = Text2SQLPipeline()
-model.forward()
+if __name__ == "__main__":
+    model = Text2SQLPipeline()
+    model.forward()
 
