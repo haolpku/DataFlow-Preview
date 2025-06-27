@@ -6,12 +6,13 @@ on:
     paths:
       - "**/*.py"
       - "requirements.txt" 
+      - ".github/workflows/*.yml"
   pull_request:
     branches: [ "main" ]
     paths:
       - "**/*.py"
       - "requirements.txt" 
-
+      - ".github/workflows/*.yml"
 jobs:
   test:
     name: Run tests on ${{ matrix.os }} with Python ${{ matrix.python }}
@@ -54,8 +55,14 @@ jobs:
         pytest -m cpu test
 
   big-model-test:
+    if: github.repository == 'Open-DataFlow/DataFlow-Preview'
     runs-on: [self-hosted]  # 跑在你的私有 GPU runner 上
     steps:
       - uses: actions/checkout@v4
-      - run: |
+
+      - name: Install GPU dependencies
+        run: pip install -e .[muxi]
+
+      - name: Run GPU tests
+        run: |
           pytest -m gpu test
