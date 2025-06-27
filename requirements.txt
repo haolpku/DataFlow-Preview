@@ -18,3 +18,8 @@ pytest
 rich
 docstring_parser
 pydantic
+# text2sql
+nltk
+func_timeout
+
+
