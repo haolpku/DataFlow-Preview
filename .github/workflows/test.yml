@@ -61,8 +61,11 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Install GPU dependencies
-        run: pip install -e '.[muxi]'
+        run: pip install -e .
 
+      - name: upgrade omegaconf
+        run: pip install --upgrade omegaconf
+        
       - name: Run GPU tests
         run: |
           pytest -m gpu test
