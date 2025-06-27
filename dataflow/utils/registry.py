@@ -70,7 +70,7 @@ class Registry():
         logger = get_logger()
         if ret is None:
             if self._name == 'operator': 
-                for x in ['eval', 'generate', 'process']:
+                for x in ['eval', 'generate', 'process', 'refine']:
                     module_path = "dataflow.operators." + x
                     try:
                         module_lib = importlib.import_module(module_path)

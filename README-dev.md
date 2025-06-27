@@ -23,7 +23,7 @@ dataflow env
 export API_KEY=<your key>
 ```
 
-随后切换工作路径到`/test`下，直接执行即可体验一个超短的reasoning pipeline (还没写完)
+随后**切换工作路径到`/test`下**，直接执行即可体验一个超短的pipeline
 ```shell
 python test_reasoning.py
 ```

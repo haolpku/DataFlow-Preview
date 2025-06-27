@@ -1,9 +1,7 @@
 # DataFlow
 
-# DataFlow
-
 <div align="center">
-  <img src="./static/images/Face.png">
+  <img src="./static/images/Face.jpg">
 
 [![](https://img.shields.io/github/license/Open-DataFlow/DataFlow)](https://github.com/Open-DataFlow/DataFlow/blob/main/LICENSE)
 [![](https://img.shields.io/github/stars/Open-DataFlow/DataFlow?style=social)](https://github.com/Open-DataFlow/DataFlow)
@@ -19,9 +17,7 @@
 
 ## 1 最新动态
 
-- [2025-06-15] 🎉 我们发布了 dataflow-agentbot。
-- [2025-06-10] 🎉 我们发布了 DataFlow 的官方文档。
-- [2025-06-01] 🎉 我们开源了全新数据中心化的数据生成与评估系统，代码即将上线。
+- [2025-06-2025-06-28] 🎉 我们全新发布的数据中心化生成与评估系统**DataFlow**已开源 —— 敬请关注后续更新！
 
 ## 2 项目概述
 

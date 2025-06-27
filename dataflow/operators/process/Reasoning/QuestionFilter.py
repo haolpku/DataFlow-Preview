@@ -51,7 +51,7 @@ class QuestionFilter(OperatorABC):
                 "QuestionFilter performs correctness checking on math questions using a multi-stage LLM evaluation and returns binary results (0/1)."
             )
     
-    def ResloveResponse(self,response):
+    def ResolveResponse(self, response):
         try:
             pattern = re.compile(r'"judgement_test"\s*:\s*(true|false)', re.IGNORECASE)
             match = pattern.search(response)
@@ -71,13 +71,13 @@ class QuestionFilter(OperatorABC):
             self.logger.error(f"Response format error for problem: {response}. Error: {e}")
             return False
             
-    def run(self, storage:DataFlowStorage, input_key: str ) -> list:
+    def run(self, storage: DataFlowStorage, input_key: str = "math_problem") -> list:
         self.input_key = input_key
         dataframe = storage.read("dataframe")
         questions = dataframe[input_key]
         inputs = [QuestionFilterPrompt().build_prompt(question) for question in questions]
-        responses = self.llm_serving.generate_from_input(input=inputs, system_prompt=self.system_prompt)
-        results = [self.ResloveResponse(response) for response in responses]
+        responses = self.llm_serving.generate_from_input(user_inputs=inputs, system_prompt=self.system_prompt)
+        results = [self.ResolveResponse(response) for response in responses]
         
         # 保留results为True的行
         dataframe = dataframe[results]

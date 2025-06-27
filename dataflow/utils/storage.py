@@ -51,39 +51,92 @@ class FileStorage(DataFlowStorage):
     def reset(self):
         self.operator_step = -1
         return self
+    
+    def _load_local_file(self, file_path: str, file_type: str) -> pd.DataFrame:
+        """Load data from local file based on file type."""
+        try:
+            if file_type == "json":
+                return pd.read_json(file_path)
+            elif file_type == "jsonl":
+                return pd.read_json(file_path, lines=True)
+            elif file_type == "csv":
+                return pd.read_csv(file_path)
+            elif file_type == "parquet":
+                return pd.read_parquet(file_path)
+            elif file_type == "pickle":
+                return pd.read_pickle(file_path)
+            else:
+                raise ValueError(f"Unsupported file type: {file_type}")
+        except Exception as e:
+            raise ValueError(f"Failed to load {file_type} file: {str(e)}")
+    
+    def _convert_output(self, dataframe: pd.DataFrame, output_type: str) -> Any:
+        """Convert dataframe to requested output type."""
+        if output_type == "dataframe":
+            return dataframe
+        elif output_type == "dict":
+            return dataframe.to_dict(orient="records")
+        raise ValueError(f"Unsupported output type: {output_type}")
 
     def read(self, output_type: Literal["dataframe", "dict"]) -> Any:
         """
         Read data from current file managed by storage.
-        output_type: type that you want to read to, such as "dataframe", List[dict], etc.
+        
+        Args:
+            output_type: Type that you want to read to, either "dataframe" or "dict".
+            Also supports remote datasets with prefix:
+                - "hf:{dataset_name}{:config}{:split}"  => HuggingFace dataset eg. "hf:openai/gsm8k:main:train"
+                - "ms:{dataset_name}{}:split}"          => ModelScope dataset eg. "ms:modelscope/gsm8k:train"
+        
+        Returns:
+            Depending on output_type:
+            - "dataframe": pandas DataFrame
+            - "dict": List of dictionaries
+        
+        Raises:
+            ValueError: For unsupported file types or output types
         """
         file_path = self._get_cache_file_path(self.operator_step)
         print(f"Reading data from {file_path} with type {output_type}")
 
         if self.operator_step == 0:
-            local_cache = file_path.split(".")[-1]
+            source = self.first_entry_file_name
+            print(f"Reading remote dataset from {source} with type {output_type}")
+            if source.startswith("hf:"):
+                from datasets import load_dataset
+                _, dataset_name, *parts = source.split(":")
+
+                if len(parts) == 1:
+                    config, split = None, parts[0]
+                elif len(parts) == 2:
+                    config, split = parts
+                else:
+                    config, split = None, "train"
+
+                dataset = (
+                    load_dataset(dataset_name, config, split=split) 
+                    if config 
+                    else load_dataset(dataset_name, split=split)
+                )
+                dataframe = dataset.to_pandas()
+                return self._convert_output(dataframe, output_type)
+        
+            elif source.startswith("ms:"):
+                from modelscope import MsDataset
+                _, dataset_name, *split_parts = source.split(":")
+                split = split_parts[0] if split_parts else "train"
+
+                dataset = MsDataset.load(dataset_name, split=split)
+                dataframe = pd.DataFrame(dataset)
+                return self._convert_output(dataframe, output_type)
+                            
+            else:
+                local_cache = file_path.split(".")[-1]
         else:
             local_cache = self.cache_type
 
-        # load data from file
-        if local_cache == "json":
-            dataframe = pd.read_json(file_path)
-        elif local_cache == "jsonl":
-            dataframe = pd.read_json(file_path, lines=True)
-        elif local_cache == "csv":
-            dataframe = pd.read_csv(file_path)
-        elif local_cache == "parquet":
-            dataframe = pd.read_parquet(file_path)
-        elif local_cache == "pickle":
-            dataframe = pd.read_pickle(file_path)
-        else:
-            raise ValueError(f"Unsupported file type: {self.cache_type}, input file should end with json, jsonl, csv, parquet, pickle")
-        
-        if output_type == "dataframe":
-            return dataframe
-        elif output_type == "dict":
-            return dataframe.to_dict(orient="records")
-        raise ValueError(f"Unsupported type: {output_type}, type should be dataframe or dict")
+        dataframe = self._load_local_file(file_path, local_cache)
+        return self._convert_output(dataframe, output_type)
         
     def write(self, data: Any) -> Any:
         """
