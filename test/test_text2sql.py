@@ -107,7 +107,6 @@ class Text2SQLPipeline():
             storage=self.storage.step(),
             input_db_key=input_dbid_key,
             table_schema_file_db_key="db_id",
-            selected_schema_key="selected_schema",
             output_raw_schema_key="whole_schema",
             output_ddl_key="ddl",
             output_whole_format_schema_key="whole_format_schema"

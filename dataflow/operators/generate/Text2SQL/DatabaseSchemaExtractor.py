@@ -279,7 +279,6 @@ class DatabaseSchemaExtractor(OperatorABC):
     def run(self, storage: DataFlowStorage,
             input_db_key: str = "db_id", 
             table_schema_file_db_key: str = "db_id",
-            selected_schema_key: str = "selected_schema",
             output_raw_schema_key: str = "whole_schema",
             output_ddl_key: str = "ddl",
             output_whole_format_schema_key: str ="whole_format_schema"
@@ -288,7 +287,6 @@ class DatabaseSchemaExtractor(OperatorABC):
         self.output_raw_schema_key = output_raw_schema_key
         self.output_ddl_key = output_ddl_key
         self.output_whole_format_schema_key = output_whole_format_schema_key
-        self.output_selected_format_schema_key = selected_schema_key
         self.table_schema_file_db_key = table_schema_file_db_key
 
         raw_dataframe = storage.read("dataframe")
