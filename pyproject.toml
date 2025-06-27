@@ -50,4 +50,4 @@ version = {attr = "dataflow.version.__version__"}
 dependencies = {file = "requirements.txt"}
 
 [project.optional-dependencies]
-vllm = ["vllm==0.7.2"]
+vllm = ["vllm<0.8"]
