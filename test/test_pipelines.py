@@ -19,6 +19,11 @@ def test_reasoning_pipeline(llm_serving):
     pytest
     resoning_pipe = ReasoningPipeline(llm_serving=llm_serving)
     resoning_pipe.forward()
+    
+@pytest.mark.gpu
+def test_reasoning_pipeline_pretrain(llm_serving):
+    reasoning_pipe_pretrain = ReasoningPipeline_Pretrain(llm_serving=llm_serving)
+    reasoning_pipe_pretrain.forward()
 
 @pytest.mark.gpu
 def test_text_pipeline(llm_serving):
@@ -30,7 +35,3 @@ def test_agentic_rag_pipeline(llm_serving):
     rag_pipe = AgenticRAGPipeline(llm_serving=llm_serving)
     rag_pipe.forward()
 
-@pytest.mark.gpu
-def test_reasoning_pipeline_pretrain(llm_serving):
-    reasoning_pipe_pretrain = ReasoningPipeline_Pretrain(llm_serving=llm_serving)
-    reasoning_pipe_pretrain.forward()
