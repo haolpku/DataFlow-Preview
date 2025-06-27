@@ -69,7 +69,8 @@ class KBCleaningPipeline():
             input_key= "raw_content",
             output_key="cleaned",
         )
-
-model = KBCleaningPipeline()
-model.forward(raw_file="/data0/hzy/DataFlow-Preview/test_mineru/muban.pdf")
+        
+if __name__ == "__main__":
+    model = KBCleaningPipeline()
+    model.forward(raw_file="/data0/hzy/DataFlow-Preview/test_mineru/muban.pdf")
 

@@ -3,6 +3,7 @@ from test_reasoning import ReasoningPipeline
 from test_reasoning_pretrain import ReasoningPipeline_Pretrain
 from test_general_text import TextPipeline
 from test_agentic_rag import AgenticRAGPipeline
+from test_text2sql import Text2SQLPipeline
 @pytest.fixture(scope="session")
 def llm_serving():
     from dataflow.llmserving import LocalModelLLMServing
@@ -18,9 +19,8 @@ def llm_serving():
 
 @pytest.mark.gpu
 def test_reasoning_pipeline(llm_serving): 
-    pytest
-    resoning_pipe = ReasoningPipeline(llm_serving=llm_serving)
-    resoning_pipe.forward()
+    reasoning_pipe = ReasoningPipeline(llm_serving=llm_serving)
+    reasoning_pipe.forward()
     
 @pytest.mark.gpu
 def test_reasoning_pipeline_pretrain(llm_serving):
@@ -39,7 +39,6 @@ def test_agentic_rag_pipeline(llm_serving):
 
 @pytest.mark.gpu
 def test_text2sql_pipeline(llm_serving):
-    from test_text2sql import Text2SQLPipeline
     text2sql_pipe = Text2SQLPipeline(llm_serving=llm_serving)
     text2sql_pipe.forward()
 
