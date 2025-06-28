@@ -4,16 +4,16 @@
   <img src="./static/images/Face.jpg">
 
 
-[![](https://img.shields.io/github/license/Open-DataFlow/DataFlow)](https://github.com/Open-DataFlow/DataFlow/blob/main/LICENSE)
-[![](https://img.shields.io/github/stars/Open-DataFlow/DataFlow?style=social)](https://github.com/Open-DataFlow/DataFlow)
-[![](https://img.shields.io/github/issues-raw/Open-DataFlow/DataFlow)](https://github.com/Open-DataFlow/DataFlow/issues)
-[![](https://img.shields.io/github/last-commit/Open-DataFlow/DataFlow)](https://github.com/Open-DataFlow/DataFlow/commits/main/)
-[![](https://img.shields.io/github/contributors/Open-DataFlow/DataFlow)](https://github.com/Open-DataFlow/DataFlow/graphs/contributors)
+[![](https://img.shields.io/github/license/OpenDCAI/DataFlow)](https://github.com/OpenDCAI/DataFlow/blob/main/LICENSE)
+[![](https://img.shields.io/github/stars/OpenDCAI/DataFlow?style=social)](https://github.com/OpenDCAI/DataFlow)
+[![](https://img.shields.io/github/issues-raw/OpenDCAI/DataFlow)](https://github.com/OpenDCAI/DataFlow/issues)
+[![](https://img.shields.io/github/last-commit/OpenDCAI/DataFlow)](https://github.com/OpenDCAI/DataFlow/commits/main/)
+[![](https://img.shields.io/github/contributors/OpenDCAI/DataFlow)](https://github.com/OpenDCAI/DataFlow/graphs/contributors)
 
 [简体中文](./README-zh.md) | English
 
 
-**[Features](#Features) • [Quick Start](#Quick_Start) • [Documentation](https://open-dataflow.github.io/DataFlow-Doc/) • [Experiments](#Experiments)**
+**[Features](#Features) • [Quick Start](#Quick_Start) • [Documentation](https://OpenDCAI.github.io/DataFlow-Doc/) • [Experiments](#Experiments)**
 
 </div>
 
@@ -54,7 +54,7 @@ Current Pipelines in Dataflow are as follows:
 - **Agentic RAG Pipeline**: Identify and extract QA pairs from existing QA datasets or knowledge bases that require external knowledge to answer, for use in downstream training of Agnetic RAG tasks.
 
 ### 3.2 Flexible Operator PipeLines
-In this framework, operators are categorized into Fundamental Operators, Generic Operators, Domain-Specific Operators, and Evaluation Operators, etc., supporting data processing and evaluation functionalities. Please refer to the [documentation](https://open-dataflow.github.io/DataFlow-Doc/) for details.
+In this framework, operators are categorized into Fundamental Operators, Generic Operators, Domain-Specific Operators, and Evaluation Operators, etc., supporting data processing and evaluation functionalities. Please refer to the [documentation](https://OpenDCAI.github.io/DataFlow-Doc/) for details.
 
 ### 3.3 Agent Guided Pipelines
 <!-- Building on top of this, we also provide the -->
@@ -72,12 +72,12 @@ For environment setup and installation, please using the following commands👇
 conda create -n dataflow python=3.10
 conda activate dataflow
 
-git clone https://github.com/Open-DataFlow/DataFlow
+git clone https://github.com/OpenDCAI/DataFlow
 cd DataFlow
 pip install -e .
 ```
 
-For **Quick-Start** and **Guide**, please visit or [Documentation](https://open-dataflow.github.io/DataFlow-Doc/).
+For **Quick-Start** and **Guide**, please visit or [Documentation](https://OpenDCAI.github.io/DataFlow-Doc/).
 
 
 ## 5 Experimental Results
@@ -109,11 +109,11 @@ We fine-tuned the Qwen2.5-Coder-7B model on the Bird dataset using both Supervis
 ![alt text](./static/images/text2sql.png)
 
 <!-- ## Statistics
-<a href="https://star-history.com/#Open-DataFlow/DataFlow&Date">
+<a href="https://star-history.com/#OpenDCAI/DataFlow&Date">
  <picture>
-   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=Open-DataFlow/DataFlow&type=Date&theme=dark" />
-   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=Open-DataFlow/DataFlow&type=Date" />
-   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=Open-DataFlow/DataFlow&type=Date" />
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/svg?repos=OpenDCAI/DataFlow&type=Date&theme=dark" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/svg?repos=OpenDCAI/DataFlow&type=Date" />
+   <img alt="Star History Chart" src="https://api.star-history.com/svg?repos=OpenDCAI/DataFlow&type=Date" />
  </picture>
 </a>
  -->
